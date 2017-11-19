@@ -134,58 +134,102 @@ class twitterListManager {
 	}
 
 	public function handle_list_actions() {
-		if ( 'POST' === $_SERVER['REQUEST_METHOD'] && isset( $_POST['tlm_list_name'] ) ) {
-			wp_verify_nonce( $_POST['tlm-nonce'], 'create-list' );
+		if ( ! empty( $_GET['page'] ) && 'twitter-list-manager' === $_GET['page'] ) {
+			// Add List
+			if ( 'POST' === $_SERVER['REQUEST_METHOD'] && isset( $_POST['tlm_list_name'] ) ) {
+				wp_verify_nonce( $_POST['tlm-nonce'], 'create-list' );
 
-			$_POST['tlm_list_name'] = substr( preg_replace( array( '/^[^a-zA-Z]*/', '/[^a-zA-Z0-9 _-]/' ), array( '', '' ), $_POST['tlm_list_name'] ), 0, 25 );
+				$_POST['tlm_list_name'] = substr( preg_replace( array( '/^[^a-zA-Z]*/', '/[^a-zA-Z0-9 _-]/' ), array( '', '' ), $_POST['tlm_list_name'] ), 0, 25 );
 
-			if ( empty( $this->_settings['tlm-authed-users'] ) || ! isset( $this->_settings['tlm-authed-users'][ $_POST['tlm_list_owner'] ] ) ) {
-				$this->add_error( 'bad-user', __( 'Must specify valid authed Twitter user', 'twitter-list-manager' ) );
-			} else {
-				$this->_wp_twitter_oauth->set_token( $this->_settings['tlm-authed-users'][ $_POST['tlm_list_owner'] ] );
-				$twitter_return = $this->_wp_twitter_oauth->send_authed_request( 'lists/create', 'POST', array( 'name' => $_POST['tlm_list_name'], 'description' => $_POST['tlm_list_description'] ) );
+				if ( empty( $this->_settings['tlm-authed-users'] ) || ! isset( $this->_settings['tlm-authed-users'][ $_POST['tlm_list_owner'] ] ) ) {
+					$this->add_error( 'bad-user', __( 'Must specify valid authed Twitter user', 'twitter-list-manager' ) );
+				} else {
+					$this->_wp_twitter_oauth->set_token( $this->_settings['tlm-authed-users'][ $_POST['tlm_list_owner'] ] );
+					$twitter_return = $this->_wp_twitter_oauth->send_authed_request( 'lists/create', 'POST', array( 'name' => $_POST['tlm_list_name'], 'description' => $_POST['tlm_list_description'] ) );
+					if ( is_wp_error( $twitter_return ) ) {
+						$this->add_error( $twitter_return );
+					} else {
+						$this->_lists[ $twitter_return->id ] = $twitter_return;
+						$local_list_info = new stdClass();
+						$local_list_info->url = $_POST['tlm_list_url'];
+						update_option( 'tlm-local-list-info-' . $twitter_return->id_str, $local_list_info, false );
+						$this->add_users_to_list( $twitter_return->id, $this->get_twitter_users_from_url( $local_list_info->url ) );
+						$this->add_error( 'success', dump( $twitter_return, 'Twitter Response', 'html', true ) );
+					}
+				}
+			}
+
+			// Delete List
+			if ( ! empty( $_GET['tlm-delete-list'] ) ) {
+				$list_id = $_GET['tlm-delete-list'];
+				check_admin_referer( 'tlm-delete-' . $list_id, 'tlm-delete-nonce' );
+
+				if ( empty( $this->_settings['tlm-authed-users'] ) ) {
+					return;
+				}
+				$lists = $this->get_lists();
+				if ( isset( $lists[ $list_id ] ) && isset( $this->_settings['tlm-authed-users'][ $lists[ $list_id ]->user->screen_name ] ) ) {
+					$user_to_auth = $this->_settings['tlm-authed-users'][ $lists[ $list_id ]->user->screen_name ];
+				} else {
+					$user_to_auth = current( $this->_settings['tlm-authed-users'] );
+				}
+
+				$this->_wp_twitter_oauth->set_token( $user_to_auth );
+
+				$twitter_return = $this->_wp_twitter_oauth->send_authed_request( 'lists/destroy', 'POST', array( 'list_id' => $list_id ) );
 				if ( is_wp_error( $twitter_return ) ) {
 					$this->add_error( $twitter_return );
 				} else {
-					$this->_lists[ $twitter_return->id ] = $twitter_return;
-					$local_list_info = new stdClass();
-					$local_list_info->url = $_POST['tlm_list_url'];
-					update_option( 'tlm-local-list-info-' . $twitter_return->id_str, $local_list_info, false );
-					$this->add_users_to_list( $twitter_return->id, $this->get_twitter_users_from_url( $local_list_info->url ) );
-					$this->add_error( 'success', dump( $twitter_return, 'Twitter Response', 'html', true ) );
+					delete_option( 'tlm-local-list-info-' . $list_id );
+					$redirect_args = array(
+						'message' => 'tlm-deleted-list',
+					);
+					wp_safe_redirect( add_query_arg( $redirect_args, $this->get_lists_url() ) );
+					exit;
+				}
+			}
+
+			// Refresh List from URL
+			if ( ! empty( $_GET['tlm-refresh-list'] ) ) {
+				$list_id = $_GET['tlm-refresh-list'];
+				check_admin_referer( 'tlm-refresh-' . $list_id, 'tlm-refresh-nonce' );
+
+				if ( empty( $this->_settings['tlm-authed-users'] ) ) {
+					return;
+				}
+
+				$url = $this->get_local_list_info( $list_id )->url;
+				if ( empty( $url ) ) {
+					$this->add_error( 'no-url', __( 'Could not refresh the list - no URL found.', 'twitter-list-manager' ) );
+					return;
+				}
+
+				$lists = $this->get_lists();
+				if ( isset( $lists[ $list_id ] ) && isset( $this->_settings['tlm-authed-users'][ $lists[ $list_id ]->user->screen_name ] ) ) {
+					$user_to_auth = $this->_settings['tlm-authed-users'][ $lists[ $list_id ]->user->screen_name ];
+				} else {
+					$user_to_auth = current( $this->_settings['tlm-authed-users'] );
+				}
+
+				$this->_wp_twitter_oauth->set_token( $user_to_auth );
+
+				$twitter_return = $this->refresh_list_from_url( $list_id, $url );
+				if ( is_wp_error( $twitter_return ) ) {
+					$this->add_error( $twitter_return );
+				} else {
+					$redirect_args = array(
+						'message' => 'tlm-refreshed-list',
+					);
+					wp_safe_redirect( add_query_arg( $redirect_args, $this->get_lists_url() ) );
+					exit;
 				}
 			}
 		}
+	}
 
-		if ( ! empty( $_GET['tlm-delete-list'] ) && ! empty( $_GET['page'] ) && 'twitter-list-manager' === $_GET['page'] ) {
-			$list_id = $_GET['tlm-delete-list'];
-			check_admin_referer( 'tlm-delete-' . $list_id, 'tlm-delete-nonce' );
-
-			if ( empty( $this->_settings['tlm-authed-users'] ) ) {
-				return;
-			}
-			$lists = $this->get_lists();
-			if ( isset( $lists[ $list_id ] ) && isset( $this->_settings['tlm-authed-users'][$lists[ $list_id ]->user->screen_name] ) ) {
-				$user_to_auth = $this->_settings['tlm-authed-users'][$lists[ $list_id ]->user->screen_name];
-			} else {
-				$user_to_auth = current( $this->_settings['tlm-authed-users'] );
-			}
-
-			$this->_wp_twitter_oauth->set_token( $user_to_auth );
-
-			$twitter_return = $this->_wp_twitter_oauth->send_authed_request( 'lists/destroy', 'POST', array( 'list_id' => $list_id ) );
-			if ( is_wp_error( $twitter_return ) ) {
-				$this->add_error( $twitter_return );
-			} else {
-				delete_option( 'tlm-local-list-info-' . $list_id );
-				$redirect_args = array(
-					'message' => 'tlm-deleted-list',
-				);
-				wp_safe_redirect( add_query_arg( $redirect_args, $this->get_lists_url() ) );
-				exit;
-			}
-		}
-
+	protected function refresh_list_from_url( $list_id, $url ) {
+		$users = $this->get_twitter_users_from_url( $url );
+		return $this->add_users_to_list( $list_id, $users );
 	}
 
 	protected function get_local_list_info( $list_id ) {
@@ -338,6 +382,8 @@ class twitterListManager {
 				}
 			} elseif ( 'tlm-deleted-list' === $_GET['message'] ) {
 				$msg = __( 'Successfully deleted list.', 'twitter-list-manager' );
+			} elseif ( 'tlm-refreshed-list' === $_GET['message'] ) {
+				$msg = __( 'Successfully refreshed list from URL.', 'twitter-list-manager' );
 			}
 			if ( ! empty( $msg ) ) {
 				printf('<div class="%1$s"><p>%2$s</p></div>', esc_attr( $class ), esc_html( $msg ) );
@@ -648,18 +694,22 @@ class twitterListManager {
 				<tbody>
 				<?php
 				foreach ( $this->get_lists() as $id => $list ) {
+					$list_refresh_url = $this->get_local_list_info( $list->id )->url;
 					?>
 					<tr>
 						<td>
 							<a href="https://twitter.com/<?php esc_attr_e( $list->uri );?>"><?php echo $list->name; ?></a>
 							<div class="row-actions">
-								<span class="trash"><a href="<?php echo wp_nonce_url( add_query_arg( array( 'tlm-delete-list' => $list->id ), $this->get_lists_url() ), 'tlm-delete-' . $list->id, 'tlm-delete-nonce' ); ?>"><?php esc_html_e( 'Delete', 'twitter-list-manager' ); ?></a></span> |
-								<span class="inline"><a href="#"><?php esc_html_e( 'Refresh', 'twitter-list-manager' ); ?></a></span>
+								<span class="delete"><a href="<?php echo wp_nonce_url( add_query_arg( array( 'tlm-delete-list' => $list->id ), $this->get_lists_url() ), 'tlm-delete-' . $list->id, 'tlm-delete-nonce' ); ?>"><?php esc_html_e( 'Delete', 'twitter-list-manager' ); ?></a></span> |
+								<span class="inline"><a href="<?php esc_attr_e( add_query_arg( array( 'tlm-edit-list' => $list->id ), $this->get_lists_url() ) ); ?>"><?php esc_html_e( 'Edit', 'twitter-list-manager' ); ?></a></span>
+								<?php if ( ! empty( $list_refresh_url ) ) { ?>
+								| <span class="inline"><a href="<?php echo wp_nonce_url( add_query_arg( array( 'tlm-refresh-list' => $list->id ), $this->get_lists_url() ), 'tlm-refresh-' . $list->id, 'tlm-refresh-nonce' ); ?>"><?php esc_html_e( 'Refresh from URL', 'twitter-list-manager' ); ?></a></span>
+								<?php } ?>
 							</div>
 						</td>
 						<td><?php echo $list->description; ?></td>
 						<td><?php echo $list->member_count; ?></td>
-						<td><?php esc_html_e( $this->get_local_list_info( $list->id )->url ); ?></td>
+						<td><?php esc_html_e( $list_refresh_url ); ?></td>
 					</tr>
 					<?php
 				}
