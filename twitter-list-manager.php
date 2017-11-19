@@ -709,13 +709,6 @@ class twitterListManager {
 					<input type="submit" name="createlist" id="createlist" class="button button-primary" value="<?php esc_attr_e( 'Create List', 'twitter-list-manager' ) ?>">
 				</p>
 			</form>
-			<?php
-			$users = $this->get_twitter_users_from_url( 'http://src.wordpress-develop.dev/test-twitter-names/' );
-			$this->add_users_to_list( 932286013300502529, $users );
-			$this->add_users_to_list( 932272594212085761, $users );
-			?>
-			<?php //dump( $this->get_list_members( 925380123339120640 ) ); ?>
-			<?php dump( $this->get_lists() ); ?>
 		</div>
 		<?php
 	}
