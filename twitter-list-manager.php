@@ -60,17 +60,17 @@ class twitterListManager {
 	/**
 	 * @var string - The option group to register
 	 */
-	protected $_optionGroup = 'tlm-options';
+	protected $_option_group = 'tlm-options';
 
 	/**
 	 * @var array - An array of options to register to the option group
 	 */
-	protected $_optionNames = array( 'tlm' );
+	protected $_option_names = array( 'tlm' );
 
 	/**
 	 * @var array - An associated array of callbacks for the options, option name should be index, callback should be value
 	 */
-	protected $_optionCallbacks = array();
+	protected $_option_callbacks = array();
 
 	/**
 	 * @var array - Array of lists cached locally
@@ -95,7 +95,7 @@ class twitterListManager {
 		add_action( 'admin_init', array( $this, 'handle_list_actions' ) );
 		add_action( 'admin_notices', array( $this, 'show_messages' ) );
 
-		add_filter( 'twitter-list-manager-opt-tlm', array( $this, 'filterSettings' ) );
+		add_filter( 'twitter-list-manager-opt-tlm', array( $this, 'filter_settings' ) );
 		add_filter( 'twitter-list-manager-opt-tlm-authed-users', array( $this, 'authed_users_option' ) );
 
 		$this->_get_settings();
@@ -126,7 +126,7 @@ class twitterListManager {
 	/**
 	 * Function to instantiate our class and make it a singleton
 	 */
-	public static function getInstance() {
+	public static function get_instance() {
 		if ( !self::$instance )
 			self::$instance = new self;
 
@@ -493,18 +493,13 @@ class twitterListManager {
 		<?php
 	}
 
-	public function targetBlank( $attributes ) {
-		$attributes['target'] = '_blank';
-		return $attributes;
-	}
-
 	public function authed_users_option( $settings ) {
 		if ( ! is_array( $settings ) )
 			return array();
 		return $settings;
 	}
 
-	public function filterSettings( $settings ) {
+	public function filter_settings( $settings ) {
 		$default_args = array(
 			'consumer-key'    => '',
 			'consumer-secret' => '',
@@ -583,19 +578,19 @@ class twitterListManager {
 	}
 
 	protected function _get_settings() {
-		foreach ( $this->_optionNames as $opt ) {
+		foreach ( $this->_option_names as $opt ) {
 			$this->_settings[$opt] = apply_filters( 'twitter-list-manager-opt-' . $opt, get_option( $opt ) );
 		}
 	}
 
 	public function register_options() {
-		foreach ( $this->_optionNames as $opt ) {
-			if ( !empty($this->_optionCallbacks[$opt]) && is_callable( $this->_optionCallbacks[$opt] ) ) {
-				$callback = $this->_optionCallbacks[$opt];
+		foreach ( $this->_option_names as $opt ) {
+			if ( !empty($this->_option_callbacks[$opt]) && is_callable( $this->_option_callbacks[$opt] ) ) {
+				$callback = $this->_option_callbacks[$opt];
 			} else {
 				$callback = '';
 			}
-			register_setting( $this->_optionGroup, $opt, $callback );
+			register_setting( $this->_option_group, $opt, $callback );
 		}
 	}
 	
@@ -747,7 +742,7 @@ class twitterListManager {
 					?>
 						<form action="options.php" method="post"<?php do_action( 'rpf-options-page-form-tag' ) ?>>
 							<?php
-							settings_fields( $this->_optionGroup );
+							settings_fields( $this->_option_group );
 							do_meta_boxes( 'aaron-twitter-list-manager', 'main', '' );
 							?>
 						</form>
@@ -785,4 +780,4 @@ class twitterListManager {
 	}
 }
 // Instantiate our class
-$twitter_list_manager = twitterListManager::getInstance();
+$twitter_list_manager = twitterListManager::get_instance();
