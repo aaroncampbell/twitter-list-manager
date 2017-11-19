@@ -137,6 +137,11 @@ class twitterListManager {
 		if ( ! empty( $_GET['page'] ) && 'twitter-list-manager' === $_GET['page'] ) {
 			// Add List
 			if ( 'POST' === $_SERVER['REQUEST_METHOD'] && isset( $_POST['tlm_list_name'] ) ) {
+				$update = false;
+				if ( $_POST['tlm_list_id'] ) {
+					$list_id = $_POST['tlm_list_id'];
+					$update = true;
+				}
 				wp_verify_nonce( $_POST['tlm-nonce'], 'create-list' );
 
 				$_POST['tlm_list_name'] = substr( preg_replace( array( '/^[^a-zA-Z]*/', '/[^a-zA-Z0-9 _-]/' ), array( '', '' ), $_POST['tlm_list_name'] ), 0, 25 );
@@ -145,7 +150,20 @@ class twitterListManager {
 					$this->add_error( 'bad-user', __( 'Must specify valid authed Twitter user', 'twitter-list-manager' ) );
 				} else {
 					$this->_wp_twitter_oauth->set_token( $this->_settings['tlm-authed-users'][ $_POST['tlm_list_owner'] ] );
-					$twitter_return = $this->_wp_twitter_oauth->send_authed_request( 'lists/create', 'POST', array( 'name' => $_POST['tlm_list_name'], 'description' => $_POST['tlm_list_description'] ) );
+					$request_url = 'lists/create';
+					$redirect_args = array(
+						'message' => 'tlm-added-list',
+					);
+					$parameters = [
+						'name' => $_POST['tlm_list_name'],
+						'description' => $_POST['tlm_list_description']
+					];
+					if ( $update ) {
+						$parameters['list_id'] = $list_id;
+						$request_url = 'lists/update';
+						$redirect_args['message'] = 'tlm-updated-list';
+					}
+					$twitter_return = $this->_wp_twitter_oauth->send_authed_request( $request_url, 'POST', $parameters );
 					if ( is_wp_error( $twitter_return ) ) {
 						$this->add_error( $twitter_return );
 					} else {
@@ -153,8 +171,9 @@ class twitterListManager {
 						$local_list_info = new stdClass();
 						$local_list_info->url = $_POST['tlm_list_url'];
 						update_option( 'tlm-local-list-info-' . $twitter_return->id_str, $local_list_info, false );
-						$this->add_users_to_list( $twitter_return->id, $this->get_twitter_users_from_url( $local_list_info->url ) );
-						$this->add_error( 'success', dump( $twitter_return, 'Twitter Response', 'html', true ) );
+						$this->refresh_list_from_url( $twitter_return->id, $local_list_info->url );
+						wp_safe_redirect( add_query_arg( $redirect_args, $this->get_lists_url() ) );
+						exit;
 					}
 				}
 			}
@@ -249,7 +268,6 @@ class twitterListManager {
 		}
 
 		$existing_users = $this->get_list_members( $list_id );
-		dump( $existing_users, 'Existing Users' );
 
 		$users = array_map( 'strtolower', $users );
 		$users = array_unique( $users );
@@ -380,6 +398,10 @@ class twitterListManager {
 					$msg = __( 'There was a problem removing your account.', 'twitter-list-manager' );
 					$class = 'error';
 				}
+			} elseif ( 'tlm-added-list' === $_GET['message'] ) {
+				$msg = __( 'Successfully added list.', 'twitter-list-manager' );
+			} elseif ( 'tlm-updated-list' === $_GET['message'] ) {
+				$msg = __( 'Successfully updated list.', 'twitter-list-manager' );
 			} elseif ( 'tlm-deleted-list' === $_GET['message'] ) {
 				$msg = __( 'Successfully deleted list.', 'twitter-list-manager' );
 			} elseif ( 'tlm-refreshed-list' === $_GET['message'] ) {
@@ -701,7 +723,7 @@ class twitterListManager {
 							<a href="https://twitter.com/<?php esc_attr_e( $list->uri );?>"><?php echo $list->name; ?></a>
 							<div class="row-actions">
 								<span class="delete"><a href="<?php echo wp_nonce_url( add_query_arg( array( 'tlm-delete-list' => $list->id ), $this->get_lists_url() ), 'tlm-delete-' . $list->id, 'tlm-delete-nonce' ); ?>"><?php esc_html_e( 'Delete', 'twitter-list-manager' ); ?></a></span> |
-								<span class="inline"><a href="<?php esc_attr_e( add_query_arg( array( 'tlm-edit-list' => $list->id ), $this->get_lists_url() ) ); ?>"><?php esc_html_e( 'Edit', 'twitter-list-manager' ); ?></a></span>
+								<span class="inline"><a href="<?php esc_attr_e( add_query_arg( array( 'tlm-edit-list' => $list->id ), $this->get_lists_url() ) ); ?>#edit-list"><?php esc_html_e( 'Edit', 'twitter-list-manager' ); ?></a></span>
 								<?php if ( ! empty( $list_refresh_url ) ) { ?>
 								| <span class="inline"><a href="<?php echo wp_nonce_url( add_query_arg( array( 'tlm-refresh-list' => $list->id ), $this->get_lists_url() ), 'tlm-refresh-' . $list->id, 'tlm-refresh-nonce' ); ?>"><?php esc_html_e( 'Refresh from URL', 'twitter-list-manager' ); ?></a></span>
 								<?php } ?>
@@ -716,9 +738,33 @@ class twitterListManager {
 				?>
 				</tbody>
 			</table>
-			<h2><?php echo esc_html( __( 'Add New List', 'twitter-list-manager' ) ); ?></h2>
+			<?php
+			if ( ! empty( $_GET['tlm-edit-list'] ) && ! empty( $this->_lists[ $_GET['tlm-edit-list'] ] ) ) {
+				?>
+				<h2 id="edit-list"><?php echo esc_html( __( 'Edit List', 'twitter-list-manager' ) ); ?></h2>
+				<?php
+			} else {
+				?>
+				<h2 id="add-new-list"><?php echo esc_html( __( 'Add New List', 'twitter-list-manager' ) ); ?></h2>
+				<?php
+			}
+			?>
 			<form method="post">
-				<?php wp_nonce_field( 'create-list', 'tlm-nonce' ); ?>
+				<?php
+				$list_name = $list_description = $list_url = $list_owner = '';
+				$button_label = __( 'Create List', 'twitter-list-manager' );
+				wp_nonce_field( 'create-list', 'tlm-nonce' );
+				if ( ! empty( $_GET['tlm-edit-list'] ) && ! empty( $this->_lists[ $_GET['tlm-edit-list'] ] ) ) {
+					$list_name = $this->_lists[ $_GET['tlm-edit-list'] ]->name;
+					$list_description = $this->_lists[ $_GET['tlm-edit-list'] ]->description;
+					$list_owner = $this->_lists[ $_GET['tlm-edit-list'] ]->user->screen_name;
+					$list_url = $this->get_local_list_info( $_GET['tlm-edit-list'] )->url;
+					$button_label = __( 'Update List', 'twitter-list-manager' );
+					?>
+					<input type="hidden" name="tlm_list_id" value="<?php esc_attr_e( $_GET['tlm-edit-list'] ); ?>">
+					<?php
+				}
+				?>
 				<table class="form-table">
 					<tbody>
 						<tr class="form-field form-required">
@@ -728,7 +774,7 @@ class twitterListManager {
 									<?php
 									foreach ( $this->_settings['tlm-authed-users'] as $username => $user ) {
 										?>
-										<option value="<?php esc_attr_e( $username ); ?>"><?php esc_html_e( $username ); ?></option>
+										<option value="<?php esc_attr_e( $username ); ?>"<?php selected( $username, $list_owner ) ?>><?php esc_html_e( $username ); ?></option>
 										<?php
 									}
 									?>
@@ -738,25 +784,25 @@ class twitterListManager {
 						<tr class="form-field form-required">
 							<th scope="row"><label for="list_name"><?php _e( 'Name <span class="description">(required)</span>', 'twitter-list-manager'); ?></label></th>
 							<td>
-								<input name="tlm_list_name" type="text" id="list_name" value="" aria-required="true" autocapitalize="words" autocorrect="off" maxlength="25">
+								<input name="tlm_list_name" type="text" id="list_name" value="<?php esc_attr_e( $list_name ); ?>" aria-required="true" autocapitalize="words" autocorrect="off" maxlength="25">
 								<p class="description" id="list-name-description"><?php _e( 'Must start with a letter and can consist only of 25 or fewer letters, numbers, “-”, or “_” characters.', 'twitter-list-manager' ); ?></p>
 							</td>
 						</tr>
 						<tr class="form-field">
 							<th scope="row"><label for="list_description"><?php _e( 'Description', 'twitter-list-manager' ) ?></label></th>
-							<td><input name="tlm_list_description" type="text" id="list_description" value=""></td>
+							<td><input name="tlm_list_description" type="text" id="list_description" value="<?php esc_attr_e( $list_description ); ?>"></td>
 						</tr>
 						<tr class="form-field">
 							<th scope="row"><label for="list_url"><?php _e( 'URL', 'twitter-list-manager' ) ?></label></th>
 							<td>
-								<input name="tlm_list_url" type="url" id="list_url" value="">
+								<input name="tlm_list_url" type="url" id="list_url" value="<?php esc_attr_e( $list_url ); ?>">
 								<p class="description" id="list-url-description"><?php _e( 'This URL will be parsed for links to Twitter profiles, and those users will be added to the list.', 'twitter-list-manager' ); ?></p>
 							</td>
 						</tr>
 					</tbody>
 				</table>
 				<p class="submit">
-					<input type="submit" name="createlist" id="createlist" class="button button-primary" value="<?php esc_attr_e( 'Create List', 'twitter-list-manager' ) ?>">
+					<input type="submit" name="createlist" id="createlist" class="button button-primary" value="<?php echo esc_attr( $button_label ); ?>">
 				</p>
 			</form>
 		</div>
