@@ -45,7 +45,7 @@ class wpTwitter {
 	 *
 	 * @returns a key/value array containing oauth_token and oauth_token_secret
 	 */
-	public function getRequestToken( $oauth_callback = null ) {
+	public function get_request_token( $oauth_callback = null ) {
 		$parameters = array(
 			'oauth_nonce' => md5( microtime() . mt_rand() ),
 		);

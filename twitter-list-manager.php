@@ -285,7 +285,7 @@ class twitterListManager {
 		if ( 'authorize' == $_GET['action'] ) {
 			check_admin_referer( 'authorize' );
 			$auth_redirect = add_query_arg( array( 'action' => 'authorized' ), $this->get_options_url() );
-			$token = $this->_wp_twitter_oauth->getRequestToken( $auth_redirect );
+			$token = $this->_wp_twitter_oauth->get_request_token( $auth_redirect );
 			if ( is_wp_error( $token ) ) {
 				$this->add_error( $token );
 				return;
