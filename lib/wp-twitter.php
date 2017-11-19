@@ -12,7 +12,7 @@ class wpTwitter {
 	private $_consumer_secret;
 
 	/**
-	 * @var string Twitter Request or Access Token
+	 * @var array Twitter Request or Access Token
 	 */
 	private $_token;
 
@@ -43,7 +43,9 @@ class wpTwitter {
 	/**
 	 * Get a request_token from Twitter
 	 *
-	 * @returns a key/value array containing oauth_token and oauth_token_secret
+	 * @param string Oauth Callback
+	 *
+	 * @returns array key/value array containing oauth_token and oauth_token_secret
 	 */
 	public function get_request_token( $oauth_callback = null ) {
 		$parameters = array(
@@ -71,7 +73,9 @@ class wpTwitter {
 	/**
 	 * Get the authorize URL
 	 *
-	 * @returns a string
+	 * @param string $screen_name Twitter user name
+	 *
+	 * @returns bool|string false on failure or URL as string
 	 */
 	public function get_authorize_url( $screen_name = '' ) {
 		if ( empty( $this->_token['oauth_token'] ) )
@@ -89,6 +93,12 @@ class wpTwitter {
 
 	/**
 	 * Format and sign an OAuth / API request
+	 *
+	 * @param string $request_url Twitter URL to request
+	 * @param string $method Usually GET or POST
+	 * @param array $body_parameters Data to send with request
+	 *
+	 * @return object Twitter response or WP_Error
 	 */
 	public function send_authed_request( $request_url, $method, $body_parameters = array() ) {
 		$parameters = $this->_get_request_defaults();
@@ -136,6 +146,10 @@ class wpTwitter {
 	/**
 	 * parses the url and rebuilds it to be
 	 * scheme://host/path
+	 *
+	 * @param string $url
+	 *
+	 * @return string
 	 */
 	public function get_normalized_http_url( $url ) {
 		$parts = parse_url( $url );
@@ -179,6 +193,9 @@ class wpTwitter {
 
 	/**
 	 * The request parameters, sorted and concatenated into a normalized string.
+	 *
+	 * @param array $parameters
+	 *
 	 * @return string
 	 */
 	public function get_signable_parameters( $parameters ) {
@@ -219,6 +236,8 @@ class wpTwitter {
 	/**
 	 * Exchange request token and secret for an access token and
 	 * secret, to sign API calls.
+	 *
+	 * @param bool|string $oauth_verifier
 	 *
 	 * @returns array containing oauth_token,
 	 *                           oauth_token_secret,
