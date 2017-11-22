@@ -28,9 +28,6 @@
 	Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 */
 
-//require_once( 'tlc-transients.php' );
-//require_once( 'class.wp_widget_twitter_pro.php' );
-
 /**
  * twitterListManager is the class that handles everything outside the widget. This
  * includes filters that modify tweet content for things like linked usernames.
@@ -86,8 +83,6 @@ class twitterListManager {
 	 * This is our constructor, which is private to force the use of getInstance()
 	 */
 	protected function __construct() {
-		require_once( 'lib/wp-twitter.php' );
-
 		/**
 		 * Add filters and actions
 		 */
@@ -117,6 +112,9 @@ class twitterListManager {
 			'consumer-key'    => $this->_settings['tlm']['consumer-key'],
 			'consumer-secret' => $this->_settings['tlm']['consumer-secret'],
 		);
+		if ( ! class_exists( 'wpTwitter' ) ) {
+			require_once( 'lib/wp-twitter.php' );
+		}
 		$this->_wp_twitter_oauth = new wpTwitter( $oauth_settings );
 
 		// We want to fill 'tlm-authed-users' but not overwrite them when saving

@@ -1,5 +1,4 @@
 <?php
-require_once( 'oauth-util.php' );
 class wpTwitter {
 	/**
 	 * @var string Twitter App Consumer Key
@@ -19,6 +18,10 @@ class wpTwitter {
 	private static $_api_url;
 
 	public function __construct( $args ) {
+		if ( ! class_exists( 'wpOAuthUtil' ) ) {
+			require_once( 'oauth-util.php' );
+		}
+
 		$defaults = array(
 			'api-url' => 'https://api.twitter.com/',
 		);
