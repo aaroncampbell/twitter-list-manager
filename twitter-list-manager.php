@@ -72,7 +72,7 @@ class twitterListManager {
 	/**
 	 * @var array - Array of lists cached locally
 	 */
-	protected $_lists = '';
+	protected $_lists = array();
 
 	/**
 	 * @var array - Array of Authed Users
