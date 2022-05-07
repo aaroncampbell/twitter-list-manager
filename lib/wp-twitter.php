@@ -142,7 +142,15 @@ class wpTwitter {
 		} else {
 			if ( is_wp_error( $resp ) )
 				return $resp;
-			return new WP_Error( $resp['response']['code'], 'Could not recognize the response from Twitter' );
+
+			$error_text = 'Could not recognize the response from Twitter';
+			if ( class_exists( 'SimpleXMLElement' ) ) {
+				$xml = simplexml_load_string( $resp['body'] );
+				if ( false !== $xml && !empty( $xml->error ) ) {
+					$error_text = $xml->error;
+				}
+			}
+			return new WP_Error( $resp['response']['code'], $error_text );
 		}
 	}
 
