@@ -39,14 +39,17 @@ class wpTwitter {
 			$this->_token = $args['token'];
 	}
 
-	public static function get_api_endpoint( $method, $format = 'json', $version = '1.1' ) {
-		$method = preg_replace( '|[^\w/]|', '', $method );
-		if ( ! empty( $format ) )
-			$format = '.json';
+	public function get_api_endpoint( $endpoint, $version = '2' ) {
+		$endpoint = trim( $endpoint, '/' );
+		$version = trim( $endpoint, '/' );
+
 		if ( ! empty( $version ) )
 			$version .= '/';
+		
+		// Allow the :id placeholder for Twitter User ID
+		$endpoint = str_replace( ':id', $this->_token['user_id'], $endpoint );
 
-		return self::$_api_url . $version . $method . $format;
+		return self::$_api_url . $version . $endpoint;
 	}
 
 	/**
@@ -63,7 +66,7 @@ class wpTwitter {
 		if ( ! empty( $oauth_callback ) )
 			$parameters['oauth_callback'] = add_query_arg( array('nonce'=>$parameters['oauth_nonce']), $oauth_callback );
 
-		$request_url = self::get_api_endpoint( 'oauth/request_token', '', '' );
+		$request_url = $this->get_api_endpoint( 'oauth/request_token', '' );
 		$this->_token = $this->send_authed_request( $request_url, 'GET', $parameters );
 		if ( ! is_wp_error( $this->_token ) )
 			$this->_token['nonce'] = $parameters['oauth_nonce'];
@@ -97,7 +100,7 @@ class wpTwitter {
 			$query_args['screen_name'] = $screen_name;
 			$query_args['force_login'] = 'true';
 		}
-		return add_query_arg( $query_args, self::get_api_endpoint( 'oauth/authorize', '', '' ) );
+		return add_query_arg( $query_args, $this->get_api_endpoint( 'oauth/authorize', '' ) );
 	}
 
 	/**
@@ -279,7 +282,7 @@ class wpTwitter {
 		if ( ! empty( $oauth_verifier ) )
 			$parameters['oauth_verifier'] = $oauth_verifier;
 
-		$request_url = self::get_api_endpoint( 'oauth/access_token', '', '' );
+		$request_url = $this->get_api_endpoint( 'oauth/access_token', '' );
 		$this->_token = $this->send_authed_request( $request_url, 'GET', $parameters );
 		return $this->_token;
 	}
