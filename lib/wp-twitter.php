@@ -160,7 +160,10 @@ class wpTwitter {
 				return $resp;
 
 			$error_text = 'Could not recognize the response from Twitter';
-			if ( class_exists( 'SimpleXMLElement' ) ) {
+			$error = json_decode( $resp['body'] );
+			if ( !is_null( $error ) ) {
+				$error_text = $error->detail;
+			} elseif ( class_exists( 'SimpleXMLElement' ) ) {
 				$xml = simplexml_load_string( $resp['body'] );
 				if ( false !== $xml && !empty( $xml->error ) ) {
 					$error_text = $xml->error;
