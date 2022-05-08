@@ -111,6 +111,7 @@ class twitterListManager {
 		$oauth_settings = array(
 			'consumer-key'    => $this->_settings['tlm']['consumer-key'],
 			'consumer-secret' => $this->_settings['tlm']['consumer-secret'],
+			'bearer-token'    => $this->_settings['tlm']['bearer-token'],
 		);
 		if ( ! class_exists( 'wpTwitter' ) ) {
 			require_once( 'lib/wp-twitter.php' );
@@ -500,10 +501,10 @@ class twitterListManager {
 		?>
 		</table>
 		<?php
-		if ( empty( $this->_settings['tlm']['consumer-key'] ) || empty( $this->_settings['tlm']['consumer-secret'] ) ) {
+		if ( empty( $this->_settings['tlm']['consumer-key'] ) || empty( $this->_settings['tlm']['consumer-secret'] ) || empty( $this->_settings['tlm']['bearer-token'] ) ) {
 		?>
 		<p>
-			<strong><?php _e( 'You need to fill in the Consumer key and Consumer secret before you can authorize accounts.', 'twitter-list-manager' ) ?></strong>
+			<strong><?php _e( 'You need to fill in the Consumer key, Consumer secret, and Bearer token before you can authorize accounts.', 'twitter-list-manager' ) ?></strong>
 		</p>
 		<?php
 		} else {
@@ -533,8 +534,16 @@ class twitterListManager {
 							<input id="tlm_consumer_secret" name="tlm[consumer-secret]" type="text" class="regular-text code" value="<?php esc_attr_e( $this->_settings['tlm']['consumer-secret'] ); ?>" size="40" />
 						</td>
 					</tr>
+					<tr valign="top">
+						<th scope="row">
+							<label for="tlm_consumer_secret"><?php _e( 'Bearer token', 'twitter-list-manager' );?></label>
+						</th>
+						<td>
+							<input id="tlm_bearer_token" name="tlm[bearer-token]" type="text" class="regular-text code" value="<?php esc_attr_e( $this->_settings['tlm']['bearer-token'] ); ?>" size="40" />
+						</td>
+					</tr>
 					<?php
-					if ( empty( $this->_settings['tlm']['consumer-key'] ) || empty( $this->_settings['tlm']['consumer-secret'] ) ) {
+					if ( empty( $this->_settings['tlm']['consumer-key'] ) || empty( $this->_settings['tlm']['consumer-secret'] ) || empty( $this->_settings['tlm']['bearer-token'] ) ) {
 					?>
 					<tr valign="top">
 						<th scope="row">&nbsp;</th>
@@ -569,6 +578,7 @@ class twitterListManager {
 		$default_args = array(
 			'consumer-key'    => '',
 			'consumer-secret' => '',
+			'bearer-token'    => '',
 		);
 
 		return wp_parse_args( $settings, $default_args );
@@ -597,11 +607,16 @@ class twitterListManager {
 		$this->_lists =  array();
 		foreach ( $this->_settings['tlm-authed-users'] as $key => $u ) {
 			$this->_wp_twitter_oauth->set_token( $u );
-			$user_lists = $this->_wp_twitter_oauth->send_authed_request( 'lists/list', 'GET', array( 'resources' => 'statuses,lists' ) );
+			$user_lists = $this->_wp_twitter_oauth->send_authed_request( 'users/:id/owned_lists', 'GET', array('list.fields' => 'description,member_count,name', 'expansions' => 'owner_id'), 'bearer' );
 
 			if ( ! empty( $user_lists ) && ! is_wp_error( $user_lists ) ) {
-				foreach ( $user_lists as $l ) {
-					$this->_lists[$l->id] = $l;
+				$usernames = [];
+				foreach ( $user_lists->includes->users as $user ) {
+					$usernames[ $user->id ] = $user->username;
+				}
+				foreach ( $user_lists->data as $list ) {
+					$list->url = sprintf( 'https://twitter.com/%1$s/lists/%2$s', $usernames[ $list->owner_id ], $list->id );
+					$this->_lists[$list->id] = $list;
 				}
 			}
 		}
@@ -682,7 +697,7 @@ class twitterListManager {
 	}
 
 	public function lists_page() {
-		if ( empty( $this->_settings['tlm']['consumer-key'] ) || empty( $this->_settings['tlm']['consumer-secret'] ) ) {
+		if ( empty( $this->_settings['tlm']['consumer-key'] ) || empty( $this->_settings['tlm']['consumer-secret'] ) || empty( $this->_settings['tlm']['bearer-token'] ) ) {
 			$msg = sprintf( __( 'You need to <a href="%s">set up your Twitter app keys</a>.', 'twitter-list-manager' ), $this->get_options_url() );
 			echo '<div class="error"><p>' . $msg . '</p></div>';
 		}
@@ -718,7 +733,7 @@ class twitterListManager {
 					?>
 					<tr>
 						<td>
-							<a href="https://twitter.com/<?php esc_attr_e( $list->uri );?>"><?php echo $list->name; ?></a>
+							<a href="<?php esc_attr_e( $list->url );?>"><?php echo $list->name; ?></a>
 							<div class="row-actions">
 								<span class="delete"><a href="<?php echo wp_nonce_url( add_query_arg( array( 'tlm-delete-list' => $list->id ), $this->get_lists_url() ), 'tlm-delete-' . $list->id, 'tlm-delete-nonce' ); ?>"><?php esc_html_e( 'Delete', 'twitter-list-manager' ); ?></a></span> |
 								<span class="inline"><a href="<?php esc_attr_e( add_query_arg( array( 'tlm-edit-list' => $list->id ), $this->get_lists_url() ) ); ?>#edit-list"><?php esc_html_e( 'Edit', 'twitter-list-manager' ); ?></a></span>

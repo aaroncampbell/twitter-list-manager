@@ -11,6 +11,11 @@ class wpTwitter {
 	private $_consumer_secret;
 
 	/**
+	 * @var string Twitter App Bearer Token
+	 */
+	private $_bearer_token;
+
+	/**
 	 * @var array Twitter Request or Access Token
 	 */
 	private $_token;
@@ -28,6 +33,7 @@ class wpTwitter {
 		$args = wp_parse_args( $args, $defaults );
 		$this->_consumer_key = $args['consumer-key'];
 		$this->_consumer_secret = $args['consumer-secret'];
+		$this->_bearer_token = $args['bearer-token'];
 		self::$_api_url = $args['api-url'];
 		if ( !empty( $args['token'] ) )
 			$this->_token = $args['token'];
@@ -97,20 +103,27 @@ class wpTwitter {
 	/**
 	 * Format and sign an OAuth / API request
 	 *
-	 * @param string $request_url Twitter URL to request
+	 * @param string $endpoint Twitter Endpoint to request
 	 * @param string $method Usually GET or POST
 	 * @param array $body_parameters Data to send with request
+	 * @param string $auth_type 'signed' or 'bearer'
 	 *
 	 * @return object Twitter response or WP_Error
 	 */
-	public function send_authed_request( $request_url, $method, $body_parameters = array() ) {
+	public function send_authed_request( $endpoint, $method, $body_parameters = array(), $auth_type = 'signed' ) {
 		$parameters = $this->_get_request_defaults();
 		$parameters['body'] = wp_parse_args( $body_parameters, $parameters['body'] );
-		if ( ! filter_var( $request_url , FILTER_VALIDATE_URL ) ) {
-			$request_url = self::get_api_endpoint( $request_url );
+		if ( ! filter_var( $endpoint , FILTER_VALIDATE_URL ) ) {
+			$request_url = $this->get_api_endpoint( $endpoint );
+		} else {
+			$request_url = $endpoint;
 		}
 
-		$this->sign_request( $parameters, $request_url, $method );
+		if ( 'bearer' == $auth_type ) {
+			$this->bearer_auth( $parameters, $request_url, $method );
+		} else {
+			$this->sign_request( $parameters, $request_url, $method );
+		}
 		switch ($method) {
 			case 'GET':
 				$request_url = $this->get_normalized_http_url( $request_url ) . '?' . wpOAuthUtil::build_http_query( $parameters['body'] );
@@ -200,6 +213,10 @@ class wpTwitter {
 			}
 			$parameters['headers']['Authorization'] = 'OAuth ' . implode( ", ", $auth_params );
 		}
+	}
+
+	public function bearer_auth( &$parameters, $request_url, $method = 'GET' ) {
+		$parameters['headers']['Authorization'] = 'Bearer ' . $this->_bearer_token;
 	}
 
 	/**
