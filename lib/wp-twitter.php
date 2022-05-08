@@ -41,7 +41,7 @@ class wpTwitter {
 
 	public function get_api_endpoint( $endpoint, $version = '2' ) {
 		$endpoint = trim( $endpoint, '/' );
-		$version = trim( $endpoint, '/' );
+		$version = trim( $version, '/' );
 
 		if ( ! empty( $version ) )
 			$version .= '/';
